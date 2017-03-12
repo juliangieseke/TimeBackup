@@ -98,6 +98,8 @@ hour_of_month=$(expr $(expr $(expr $day_of_month - 1) \* 24) + $(date +"%H"))
 day_of_week=$(date +"%u")
 hour_of_week=$(expr $(expr $(expr $day_of_week - 1) \* 24) + $(date +"%H"))
 hour_of_day=$(date +"%H")
+fdate=$(date +"%Y-%m-%d %H-%M-%S")
+fdatetouch=$(date +"%Y%m%d%H%M.%S")
 
 
 ### lockfile
@@ -125,7 +127,7 @@ if [ $loglevel -eq 0 ]; then
 fi
 
 
-#remote host set?
+#Source: remote host set?
 if [ -n "$srchost" ]; then
 	_log "backup FROM remote: $srchost:$srcpath" 1
 	rsyncsrc=$srchost:$srcpath
@@ -135,7 +137,7 @@ else
 fi
 
 
-#remote host set?
+#Dest: remote host set?
 if [ -n "$dsthost" ]; then
 	_log "backup TO remote: $dsthost:$dstpath" 1
 	rexec="ssh $dsthost"
@@ -156,7 +158,7 @@ fi
 ### check for older version at destination
 if $rexec [ -d "$dstpath/$current" ]; then 
 	_log "setting link-dest (../$current)" 1
-	opts="$opts --link-dest=../$current"
+	opts="$opts --link-dest=../$current/"
 else
 	_log "no previous version available - first backup?" 1
 fi
@@ -164,7 +166,7 @@ fi
 
 
 ### create destination folder if needed
-# just using $incomplete here to allow resuming
+# just using $incomplete here to allow resuming (no more needed)
 if $rexec [ ! -d "$dstpath/$incomplete" ]; then
 	_log "creating destination folder ($incomplete)" 1
 	$rexec mkdir "$dstpath/$incomplete"
@@ -177,14 +179,14 @@ fi
 
 
 ### backing up…
-_log "backing up files (rsync $opts $rsyncsrc $rsyncdst/$incomplete)" 1
+_log "backing up files (rsync $opts $rsyncsrc/ $rsyncdst/$incomplete/)" 1
 
 # @TODO: NEEDS TESTING !!! (and refactor…)
 retcode=1
 tries=3
 while [ $retcode -ne 0 ] && [ $tries -gt 0 ]; do
 	_log "rsync output start ===================================" 2
-	rsync $opts $rsyncsrc $rsyncdst/$incomplete
+	rsync $opts $rsyncsrc/ $rsyncdst/$incomplete/
 	_log "rsync output end =====================================" 2
 	retcode=$?
 	if [ $retcode -ne 0 ]; then
@@ -202,6 +204,9 @@ if [ $retcode -ne 0 ]; then
 	exit 1
 fi
 
+_log "rsync -a preserves mtime, change for root folder" 3
+$rexec touch -t $fdatetouch $dstpath/$incomplete
+
 #_log "fixing permissions" 1
 #$rexec chmod -R $chperm $dstpath/$incomplete_$FDATE
 
@@ -210,17 +215,17 @@ fi
 #move to correct subfolder
 _log "Hour of Month: $hour_of_month" 2
 if [ $hour_of_month -eq 272 ]; then # 11. 8:00
-	mvdst="$dstpath/$(date +"%Y-%m-%d %H-%M-%S") $fnamemonth"
+	mvdst="$dstpath/$fdate $fnamemonth"
 else
 	_log "Hour of Week: $hour_of_week" 2
 	if [ $hour_of_week -eq 153 ]; then # So 9:00
-		mvdst="$dstpath/$(date +"%Y-%m-%d %H-%M-%S") $fnameweek"
+		mvdst="$dstpath/$fdate $fnameweek"
 	else
 		_log "Hour of Day: $hour_of_day" 2
 		if [ $hour_of_day -eq 10 ]; then # 10:00
-			mvdst="$dstpath/$(date +"%Y-%m-%d %H-%M-%S") $fnameday"
+			mvdst="$dstpath/$fdate $fnameday"
 		else
-			mvdst="$dstpath/$(date +"%Y-%m-%d %H-%M-%S") $fnamehour"
+			mvdst="$dstpath/$fdate $fnamehour"
 		fi
 	fi
 fi
