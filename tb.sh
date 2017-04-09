@@ -4,7 +4,7 @@
 # https://blog.interlinked.org/tutorials/rsync_time_machine.html
 # https://nicaw.wordpress.com/2013/04/18/bash-backup-rotation-script/
 
-# v 0.1 alpha 6
+# v 0.1 alpha 7
 
 
 ###############################################################################
@@ -44,24 +44,18 @@ fnamemonth='m'
 fnameweek='w'
 fnameday='d'
 fnamehour='h'
-# times for backuprotation
-keephourly=1440 #mmin
-keepdaily=14 #mtime
-keepweek=60 #mtime
-keepmonthly=550 #mtime
+# keep backups n days, used with -mtime
+keephourly=1
+keepdaily=14
+keepweekly=56 #8 * 7
+keepmonthly=504 # 18 * 4 * 7
 
 #rsync source & destination and remote exec command - set by script!
 rsyncsrc=''
 rsyncdst=''
 rexec=''
 
-# variables for backup rotation, leave britney alone!
-day_of_month=$(date +"%d")
-day_of_week=$(date +"%u")
-hour_of_day=$(date +"%H")
-hour_of_month=$(expr $(expr $(expr $day_of_month - 1) \* 24) + $hour_of_day)
-hour_of_week=$(expr $(expr $(expr $day_of_week - 1) \* 24) + $hour_of_day)
-
+#some internal folder naeming stuff
 fdate=$(date +"%Y-%m-%d_%H-%M-%S")
 fdatetouch=$(date +"%Y%m%d%H%M.%S")
 findpattern=[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9]-[0-9][0-9]-[0-9][0-9]_
@@ -132,8 +126,18 @@ function _log {
 	fi
 }
 
+#cleanup function, deletes old backups
+function _cleanup {
+	found="$($rexec find $dstpath -maxdepth 1 -mtime +$1 -name "$2" -type d)"
+	for f in $found; do
+		warncount=$(($warncount + 1))
+		_log "deleting $f" 1
+		#rm -r "$f"
+	done
+}
+
 _log "==================================================" 1
-_log "New Backup Started" 1
+_log "New Backup Started                                " 1
 _log "==================================================" 1
 
 ### lockfile
@@ -146,7 +150,6 @@ fi
 # make sure the lockfile is removed when we exit and then claim it
 trap "rm -f ${LOCKFILE}; exit" INT TERM EXIT
 echo $$ > ${LOCKFILE}
-
 _log "Lockfile created" 2
 
 
@@ -155,11 +158,11 @@ _log "setting rsync output options for Loglevel $loglevel" 2
 if [ $loglevel -ge 3 ]; then
 	opts="$opts --progress"
 fi
-if [ $loglevel -ge 1 ]; then
-	opts="$opts --verbose"
-fi
 if [ $loglevel -ge 2 ]; then
 	opts="$opts --stats"
+fi
+if [ $loglevel -ge 1 ]; then
+	opts="$opts --verbose"
 fi
 if [ $loglevel -eq 0 ]; then
 	opts="$opts --quiet"
@@ -238,7 +241,7 @@ fi
 ### backing up…
 _log "backing up files (rsync $opts $rsyncsrc $rsyncdst$incomplete/)" 2
 
-# @TODO: NEEDS TESTING !!! (and refactor…)
+# @TODO: needs testing ! (and refactor…)
 while [ $retcode -ne 0 ] && [ $tries -gt 0 ]; do
 	_log "rsync output:" 1
 	_log "==================================================" 1
@@ -271,24 +274,21 @@ fi
 #_log "fixing permissions" 1
 #$rexec chmod -R $chperm $dstpath/$incomplete_$FDATE
 
-#@TODO mehrfachaufruf des scripts abfangen (ordner jeweils überschreiben?!)
+
 #@TODO yearly?
 #move to correct subfolder
-_log "Hour of Month: $hour_of_month" 2
-if [ $hour_of_month -eq 648 ]; then # 28. 0:00
+if [ -z "$($rexec find $dstpath -type d -maxdepth 1 -name "*_$fnamemonth" -mtime -30)" ]; then
+	_log "Creating monthly Backup…" 2
 	mvdst="$dstpath$(echo $fdate)_$fnamemonth"
+elif [ -z "$($rexec find $dstpath -type d -maxdepth 1 -name "*_$fnameweek" -mtime -7)" ]; then
+	_log "Creating weekly Backup" 2
+	mvdst="$dstpath$(echo $fdate)_$fnameweek"
+elif [ -z "$($rexec find $dstpath -type d -maxdepth 1 -name "*_$fnameday" -mtime -1)" ]; then
+	_log "Creating daily Backup" 2
+	mvdst="$dstpath$(echo $fdate)_$fnameday"
 else
-	_log "Hour of Week: $hour_of_week" 2
-	if [ $hour_of_week -eq 144 ]; then # So 0:00
-		mvdst="$dstpath$(echo $fdate)_$fnameweek"
-	else
-		_log "Hour of Day: $hour_of_day" 2
-		if [ $hour_of_day -eq 0 ]; then # 0:00
-			mvdst="$dstpath$(echo $fdate)_$fnameday"
-		else
-			mvdst="$dstpath$(echo $fdate)_$fnamehour"
-		fi
-	fi
+	_log "Creating hourly Backup" 2
+	mvdst="$dstpath$(echo $fdate)_$fnamehour"
 fi
 
 _log "Saving Backup as $mvdst" 1
@@ -300,7 +300,7 @@ fi
 
 
 if $rexec [ -d "$dstpath$current" ]; then 
-	oldlink=$(readlink $dstpath$current)
+	oldlink=$($rexec readlink $dstpath$current)
 	_log "deleting symlink ($oldlink)" 2
 	$rexec rm -f "$dstpath$current"
 	if [ $? -ne 0 ]; then
@@ -314,7 +314,7 @@ $rexec ln -s "$mvdst" "$dstpath$current"
 if [ $? -ne 0 ]; then
 	_log "Cant create new symlink. exiting." 0
 	if [ -n "$oldlink"]; then
-		_log "Trying to retore the old one." 0
+		_log "Trying to restore the old one." 0
 		$rexec ln -s "$oldlink" "$dstpath$current"
 	fi
 	exit 110
@@ -325,34 +325,12 @@ if [ $? -ne 0 ]; then
 	$warncount=$(expr $warncount + 1)
 fi
 
+
 _log "cleaning up." 1
-
-#hourly (keep 24h)
-findout=$(find $dstpath -maxdepth 1 -mmin +$keephourly -name $findpattern$fnamehour* -type d -exec echo deleted {} \; -exec rm -r {} \;)
-if [ -n "$findout" ]; then
-	$warncount=$(expr $warncount + 1)
-	_log "$findout" 1
-fi 
-#daily (keep 14 days)
-findout=$(find $dstpath -maxdepth 1 -mtime +$keepdaily -name $findpattern$fnameday* -type d -exec echo deleted {} \; -exec rm -r {} \;)
-if [ -n "$findout" ]; then
-	$warncount=$(expr $warncount + 1)
-	_log "$findout" 1
-fi
-#weekly (keep 8+ weeks)
-findout=$(find $dstpath -maxdepth 1 -mtime +$keepweek -name $findpattern$fnameweek* -type d -exec echo deleted {} \; -exec rm -r {} \;)
-if [ -n "$findout" ]; then
-	$warncount=$(expr $warncount + 1)
-	_log "$findout" 1
-fi
-#montly (keep ~18 month)
-findout=$(find $dstpath -maxdepth 1 -mtime +$keepmonthly -name $findpattern$fnamemonth* -type d -exec echo deleted {} \; -exec rm -r {} \;)
-if [ -n "$findout" ]; then
-	$warncount=$(expr $warncount + 1)
-	_log "$findout" 1
-fi
-
-
+_cleanup "$keephourly" "$findpattern$fnamehour*"
+_cleanup "$keepdaily" "$findpattern$fnameday*"
+_cleanup "$keepweekly" "$findpattern$fnameweek*"
+_cleanup "$keepmonthly" "$findpattern$fnamemonth*"
 
 
 _log "done." 1
