@@ -18,5 +18,4 @@ This script provides a simple implementation of a File History Snapshot like Bac
 
 ## Changelog
 
-v 0.1 alpha (first working version)
-- basic time machine like functionality provided
+…blame tb.sh pls :)
