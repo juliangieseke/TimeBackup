@@ -5,7 +5,7 @@
 # https://nicaw.wordpress.com/2013/04/18/bash-backup-rotation-script/
 # Synology Time Backup, Apple Time Machine and others
 
-# v 0.1 alpha 8
+# v 0.1 alpha 9
 
 
 ###############################################################################
@@ -181,7 +181,7 @@ _log "DST: $rsyncdst" 1
 
 #if something is remote…
 if [ -n "$srchost" ] || [ -n "$dsthost" ]; then
-	opts="$opts --partial --append-verify --compress --rsh=\"ssh\""
+	opts="$opts --partial --append-verify --compress --timeout=600 --rsh=\"ssh\""
 fi
 
 
@@ -231,23 +231,11 @@ fi
 ### backing up…
 _log "backing up files (rsync $opts $rsyncsrc $rsyncdst$incomplete/)" 2
 
-# @TODO: needs testing ! (and refactor…)
-while [ $retcode -ne 0 ] && [ $tries -gt 0 ]; do
-	_log "rsync output:" 1
-	_log "==================================================" 1
-	rsync $opts $rsyncsrc $rsyncdst$incomplete/
-	retcode=$?
-	_log "==================================================" 1
-	if [ $retcode -ne 0 ]; then
-		_log "rsync failed, tries left: $tries" 1
-		$warncount=$(expr $warncount + 1)
-		tries=$(expr $tries - 1)
-		if [ $tries -ge 0 ]; then
-			_log "sleeping 5min" 1
-			sleep 5m
-		fi
-	fi
-done
+_log "rsync output:" 1
+_log "==================================================" 1
+rsync $opts $rsyncsrc $rsyncdst$incomplete/
+retcode=$?
+_log "==================================================" 1
 
 if [ $retcode -ne 0 ]; then
 	_log "cant complete backup. exiting." 1
