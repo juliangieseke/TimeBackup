@@ -57,8 +57,8 @@ rsyncdst=''
 rexec=''
 
 #some internal folder naeming stuff
-fdate=''
-fdatetouch=''
+fdate=$(date +"%Y-%m-%d_%H-%M-%S")
+fdatetouch=$(date +"%Y%m%d%H%M.%S")
 findpattern=[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9]-[0-9][0-9]-[0-9][0-9]_
 
 #warnings counter
@@ -127,15 +127,6 @@ function _log {
 	fi
 }
 
-#cleanup function, deletes old backups
-function _cleanup {
-	found="$($rexec find $dstpath -maxdepth 1 -mtime +$1 -name "$2" -type d)"
-	for f in $found; do
-		_log "deleting $f" 1
-		rm -r "$f"
-	done
-}
-
 _log "==================================================" 1
 _log "New Backup Started                                " 1
 _log "==================================================" 1
@@ -148,7 +139,7 @@ if [ -e ${LOCKFILE} ] && kill -0 `cat ${LOCKFILE}`; then
 fi
 
 # make sure the lockfile is removed when we exit and then claim it
-trap "_log 'User Aborted' 0; rm -f ${LOCKFILE}; exit 100" INT TERM EXIT
+trap "rm -f ${LOCKFILE}; exit 100" INT TERM
 echo $$ > ${LOCKFILE}
 _log "Lockfile created" 2
 
@@ -263,10 +254,6 @@ if [ $retcode -ne 0 ]; then
 	exit 107
 fi
 
-#backup done, what time is it?
-fdate=$(date +"%Y-%m-%d_%H-%M-%S")
-fdatetouch=$(date +"%Y%m%d%H%M.%S")
-
 
 _log "rsync -a preserves mtime, change for root folder" 3
 $rexec touch -t $fdatetouch $dstpath$incomplete
@@ -330,6 +317,15 @@ if [ $? -ne 0 ]; then
 fi
 
 
+
+#cleanup function, deletes old backups
+function _cleanup {
+	found="$($rexec find $dstpath -maxdepth 1 -mtime +$1 -name "$2" -type d)"
+	for f in $found; do
+		_log "deleting $f" 1
+		$rexec rm -r "$f"
+	done
+}
 _log "cleaning up." 1
 _cleanup "$keephourly" "$findpattern$fnamehour*"
 _cleanup "$keepdaily" "$findpattern$fnameday*"
@@ -339,7 +335,7 @@ _cleanup "$keepmonthly" "$findpattern$fnamemonth*"
 
 _log "done." 1
 rm -f ${LOCKFILE}
-_log "exiting with code $warncount" 1
+#_log "exiting with code $warncount" 1
 exit $warncount
 
 
