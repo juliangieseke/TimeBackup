@@ -3,8 +3,9 @@
 # based on ideas from:
 # https://blog.interlinked.org/tutorials/rsync_time_machine.html
 # https://nicaw.wordpress.com/2013/04/18/bash-backup-rotation-script/
+# Synology Time Backup, Apple Time Machine and others
 
-# v 0.1 alpha 7
+# v 0.1 alpha 8
 
 
 ###############################################################################
@@ -56,8 +57,8 @@ rsyncdst=''
 rexec=''
 
 #some internal folder naeming stuff
-fdate=$(date +"%Y-%m-%d_%H-%M-%S")
-fdatetouch=$(date +"%Y%m%d%H%M.%S")
+fdate=''
+fdatetouch=''
 findpattern=[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9]-[0-9][0-9]-[0-9][0-9]_
 
 #warnings counter
@@ -130,9 +131,8 @@ function _log {
 function _cleanup {
 	found="$($rexec find $dstpath -maxdepth 1 -mtime +$1 -name "$2" -type d)"
 	for f in $found; do
-		warncount=$(($warncount + 1))
 		_log "deleting $f" 1
-		#rm -r "$f"
+		rm -r "$f"
 	done
 }
 
@@ -143,12 +143,12 @@ _log "==================================================" 1
 ### lockfile
 LOCKFILE="/var/run/tb.$(echo "$srchost$srcpath$dsthost$dstpath" | tr -cd 'A-Za-z0-9_').lock"
 if [ -e ${LOCKFILE} ] && kill -0 `cat ${LOCKFILE}`; then
-	_log "Lockfile already exists! exiting." 0
+	_log "Lockfile already exists!" 0
     exit 103
 fi
 
 # make sure the lockfile is removed when we exit and then claim it
-trap "rm -f ${LOCKFILE}; exit" INT TERM EXIT
+trap "_log 'User Aborted' 0; rm -f ${LOCKFILE}; exit 100" INT TERM EXIT
 echo $$ > ${LOCKFILE}
 _log "Lockfile created" 2
 
@@ -202,7 +202,6 @@ if $rexec [ -d "$dstpath$current" ]; then
 else
 	_log "no previous version available - first backup." 1
 fi
-
 
 
 ### create destination folder if needed
@@ -263,6 +262,11 @@ if [ $retcode -ne 0 ]; then
 	_log "cant complete backup. exiting." 1
 	exit 107
 fi
+
+#backup done, what time is it?
+fdate=$(date +"%Y-%m-%d_%H-%M-%S")
+fdatetouch=$(date +"%Y%m%d%H%M.%S")
+
 
 _log "rsync -a preserves mtime, change for root folder" 3
 $rexec touch -t $fdatetouch $dstpath$incomplete
