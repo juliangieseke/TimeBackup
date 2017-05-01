@@ -1,4 +1,4 @@
-# WinTimeBackup - Time Machine for Linux
+# BashTimeBackup - Time Machine for Linux
 
 by Julian Gieseke (mail@juliangieseke.de)
 
