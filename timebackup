@@ -2,28 +2,43 @@
 
 import inspect, os, argparse
 
+def arguments_parse_destination(path):
 
-# ===============================================================
-# Finding real script path…
+	return path
 
-script_name = os.path.abspath(inspect.stack()[0][1])
-script_path = os.path.dirname(os.path.abspath(inspect.stack()[0][1]))
-working_dir = os.getcwd()
+def arguments_parse_source(path):
+
+	return path
+
+def arguments_get():
+	"""
+	parse arguments
+	ref: https://docs.python.org/3.5/library/argparse.html#the-add-argument-method
+
+	"""
+
+	parser = argparse.ArgumentParser(description='Time Backup')
+	parser.add_argument('-v', '--verbose', action='count', help='add verbosity, can be added multiple times')
+	parser.add_argument('-d', '--debug', action='store_true', help='add debug output')
+	parser.add_argument('source', nargs='+', help='these are directly passed to rsync')
+	parser.add_argument('destination', nargs=1, help='used as base path for backups')
+	args = parser.parse_args()
+
+	args.source = arguments_parse_source(args.source)
+	args.destination = arguments_parse_destination(args.destination)
+
+	return args
 
 
-# ===============================================================
-# https://docs.python.org/3.5/library/argparse.html#the-add-argument-method
 
+if __name__ == "__main__":
 
-parser = argparse.ArgumentParser(description='Time Backup')
-parser.add_argument('--verbose', '-v', action='count')
-parser.add_argument('--debug', '-d', action='store_true')
-parser.add_argument('SRC', nargs='+')
-parser.add_argument('DST', nargs=1)
+	script_name = os.path.abspath(inspect.stack()[0][1])
+	script_path = os.path.dirname(os.path.abspath(inspect.stack()[0][1]))
+	working_dir = os.getcwd()
 
+	arguments = arguments_get()
 
-args = parser.parse_args()
-print(args)
-
-
-print(working_dir)
+	print(arguments)
+	print(working_dir)
+	#parse_file(arguments)
